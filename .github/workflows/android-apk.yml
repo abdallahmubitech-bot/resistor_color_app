@@ -1,0 +1,51 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [arena/27d33b38-resistor-color-app]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.24.5'
+      - name: Generate Android runner
+        run: flutter create --platforms=android --project-name resistor_color_app .
+      - name: Install dependencies
+        run: flutter pub get
+      - name: Build release-mode APK
+        run: |
+          if ! flutter build apk --release > apk-build.log 2>&1; then
+            cat apk-build.log
+            grep -i -A 4 -B 1 'error\|failed\|exception' apk-build.log | head -10 | while IFS= read -r line; do
+              echo "::error::$line"
+            done
+            exit 1
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: resistor-studio-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+      - name: Commit APK to the session branch
+        if: github.event_name == 'push' && contains(github.event.head_commit.message, '[build apk]')
+        run: |
+          mkdir -p releases
+          cp build/app/outputs/flutter-apk/app-release.apk releases/resistor-studio.apk
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f releases/resistor-studio.apk
+          git commit -m "Add release-mode Android APK [skip ci]"
+          git push origin HEAD:arena/27d33b38-resistor-color-app
