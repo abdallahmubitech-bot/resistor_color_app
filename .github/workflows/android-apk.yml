@@ -22,7 +22,14 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
       - name: Build debug APK
-        run: flutter build apk --debug
+        run: |
+          if ! flutter build apk --debug > apk-build.log 2>&1; then
+            cat apk-build.log
+            grep -i -A 4 -B 1 'error\|failed\|exception' apk-build.log | head -10 | while IFS= read -r line; do
+              echo "::error::$line"
+            done
+            exit 1
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: resistor-studio-debug-apk
